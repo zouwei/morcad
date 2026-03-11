@@ -7,7 +7,7 @@
   "license": "GPL-3.0",
   "apiVersion": "1.0",
   "entry": {
-    "main": "dist/index.js"
+    "main": "packages/moraya/dist/index.bundle.js"
   },
   "protocol": "stdio",
   "permissions": ["editor:read"],
