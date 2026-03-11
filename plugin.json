@@ -20,5 +20,6 @@
     "editor:read": "Read current document path to resolve relative DXF file paths"
   },
   "sandboxLevel": "standard",
-  "homepage": "https://github.com/zouwei/morcad"
+  "homepage": "https://github.com/zouwei/morcad",
+  "cdnUrl": "https://cdn.jsdelivr.net/gh/zouwei/morcad@main/packages/moraya/dist/index.bundle.js"
 }
