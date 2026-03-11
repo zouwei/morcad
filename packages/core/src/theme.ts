@@ -3,13 +3,9 @@ export function resolveThemeBackground(
   override?: string,
 ): string {
   if (override) return override;
-  if (theme === 'dark') return '#1e1e1e';
-  if (theme === 'light') return '#f5f5f5';
-  // auto
-  const isDark =
-    document.documentElement.getAttribute('data-theme') === 'dark' ||
-    document.body.classList.contains('theme-dark');
-  return isDark ? '#1e1e1e' : '#f5f5f5';
+  if (theme === 'light') return '#ffffff';
+  // dark or auto → engineering drawing standard dark background
+  return '#1e1e1e';
 }
 
 export function getIsDark(): boolean {
