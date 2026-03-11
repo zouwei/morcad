@@ -1,7 +1,7 @@
 {
   "id": "morcad",
   "name": "MorCad CAD Viewer",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Renders DXF/DWG engineering drawings inline as code blocks",
   "author": "zouwei",
   "license": "GPL-3.0",
@@ -13,7 +13,9 @@
     "linux-x86_64": "bin/morcad"
   },
   "protocol": "jsonrpc-stdio",
-  "permissions": ["editor:read"],
+  "permissions": [
+    "editor:read"
+  ],
   "permissionReasons": {
     "editor:read": "Read current document path to resolve relative DXF file paths"
   },
