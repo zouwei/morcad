@@ -9,6 +9,8 @@
   "entry": {
     "main": "packages/moraya/dist/index.bundle.js"
   },
+  "protocol": "jsonrpc-stdio",
+  "permissions": ["editor:read"],
   "homepage": "https://github.com/zouwei/morcad",
   "npmPackage": "@morcad/moraya",
   "exportName": "cadRendererPlugin",
