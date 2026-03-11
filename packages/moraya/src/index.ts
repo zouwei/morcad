@@ -1,4 +1,5 @@
 import { createCadRenderer } from '@morcad/core';
+import type { FileReaderAdapter } from '@morcad/core';
 import { tauriFileAdapter } from './file-reader.js';
 
 /**
@@ -6,6 +7,29 @@ import { tauriFileAdapter } from './file-reader.js';
  * Signature matches createCadRenderer output: (container, source, docPath, isDark)
  */
 export const cadRender = createCadRenderer(tauriFileAdapter);
+
+/**
+ * Build a FileReaderAdapter from a Moraya-injected readFile function.
+ * Moraya passes readFile as the `mod` argument to render():
+ *   readFile(absolutePath: string): Promise<Uint8Array | number[] | string>
+ */
+function adapterFromReadFile(
+  readFile: (path: string) => Promise<Uint8Array | number[] | string>,
+): FileReaderAdapter {
+  return {
+    async readFile(absolutePath) {
+      const result = await readFile(absolutePath);
+      if (typeof result === 'string') {
+        return new TextEncoder().encode(result);
+      }
+      if (Array.isArray(result)) {
+        return new Uint8Array(result);
+      }
+      return result;
+    },
+    resolvePath: tauriFileAdapter.resolvePath,
+  };
+}
 
 /**
  * RendererPlugin object for Moraya's renderer-registry.ts
@@ -34,6 +58,13 @@ export const cadRendererPlugin = {
 
   async render(container: HTMLElement, source: string, _mod: unknown, docPath?: string | null) {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    // If Moraya injects a readFile function via _mod, use it; otherwise fall back to Tauri IPC.
+    if (typeof _mod === 'function') {
+      const renderer = createCadRenderer(
+        adapterFromReadFile(_mod as (path: string) => Promise<Uint8Array | number[] | string>),
+      );
+      return renderer(container, source, docPath ?? null, isDark);
+    }
     return cadRender(container, source, docPath ?? null, isDark);
   },
 };
