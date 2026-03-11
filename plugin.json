@@ -11,6 +11,9 @@
   },
   "protocol": "jsonrpc-stdio",
   "permissions": ["editor:read"],
+  "permissionReasons": {
+    "editor:read": "Read current document path to resolve relative DXF file paths"
+  },
   "homepage": "https://github.com/zouwei/morcad",
   "npmPackage": "@morcad/moraya",
   "exportName": "cadRendererPlugin",
