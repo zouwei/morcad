@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MorCad — DXF / DWG Viewer Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a1a;
+      color: #eee;
+      padding: 24px;
+    }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    p { color: #888; font-size: 13px; margin-bottom: 16px; }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    select, button, input[type="file"] {
+      background: #2a2a2a;
+      border: 1px solid #444;
+      color: #eee;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button:hover { background: #333; }
+    #viewer-container {
+      position: relative;
+      border: 1px solid #333;
+      border-radius: 6px;
+      overflow: hidden;
+      height: 500px;
+    }
+    #status {
+      padding: 8px 12px;
+      font-size: 12px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <h1>MorCad — DXF / DWG Viewer Demo</h1>
+  <p>Load a DXF or DWG file to render it with Three.js WebGL. 3D files support orbit rotation.</p>
+
+  <div class="toolbar">
+    <label>
+      Sample files:
+      <select id="sample-select">
+        <option value="">-- choose --</option>
+        <optgroup label="2D Drawings">
+          <option value="/floor-plan.dxf">floor-plan.dxf — Apartment layout</option>
+          <option value="/electrical.dxf">electrical.dxf — Distribution panel</option>
+          <option value="/mechanical-part.dxf">mechanical-part.dxf — Industrial flange</option>
+        </optgroup>
+        <optgroup label="3D Models">
+          <option value="/3d-building.dxf" data-mode="3d">3d-building.dxf — Two-story building</option>
+          <option value="/3d-mechanical.dxf" data-mode="3d">3d-mechanical.dxf — Stepped shaft</option>
+        </optgroup>
+      </select>
+    </label>
+    <span style="color:#555">or</span>
+    <input type="file" id="file-input" accept=".dxf,.dwg" />
+    <label style="display:flex;align-items:center;gap:4px;font-size:13px;">
+      <input type="checkbox" id="mode-3d" /> 3D mode
+    </label>
+    <button id="reset-btn">Reset Camera</button>
+  </div>
+
+  <div id="viewer-container"></div>
+  <div id="status">No file loaded.</div>
+
+  <script type="module">
+    import { renderCad } from '@morcad/core';
+
+    const container  = document.getElementById('viewer-container');
+    const status     = document.getElementById('status');
+    const sampleSelect = document.getElementById('sample-select');
+    const fileInput  = document.getElementById('file-input');
+    const resetBtn   = document.getElementById('reset-btn');
+    const mode3dBox  = document.getElementById('mode-3d');
+
+    let currentInstance = null;
+
+    async function loadUrl(url, force3d = false) {
+      status.textContent = `Loading ${url}…`;
+      if (currentInstance) { currentInstance.dispose(); currentInstance = null; }
+      container.innerHTML = '';
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const content = new Uint8Array(await resp.arrayBuffer());
+        const fileName = url.split('/').pop() ?? 'file.dxf';
+        const is3d = force3d || mode3dBox.checked;
+        currentInstance = await renderCad(container, content, fileName, {
+          height: 500,
+          theme: 'dark',
+          mode: is3d ? '3d' : '2d',
+          dwgWasmBaseUrl: '/',
+        });
+        status.textContent = `Loaded: ${fileName}${is3d ? '  [3D — drag to orbit]' : ''}`;
+      } catch (err) {
+        status.textContent = `Error: ${err.message}`;
+        console.error(err);
+      }
+    }
+
+    async function loadFile(file) {
+      status.textContent = `Loading ${file.name}…`;
+      if (currentInstance) { currentInstance.dispose(); currentInstance = null; }
+      container.innerHTML = '';
+      try {
+        const content = new Uint8Array(await file.arrayBuffer());
+        const is3d = mode3dBox.checked;
+        currentInstance = await renderCad(container, content, file.name, {
+          height: 500,
+          theme: 'dark',
+          mode: is3d ? '3d' : '2d',
+          dwgWasmBaseUrl: '/',
+        });
+        status.textContent = `Loaded: ${file.name}${is3d ? '  [3D — drag to orbit]' : ''}`;
+      } catch (err) {
+        status.textContent = `Error: ${err.message}`;
+        console.error(err);
+      }
+    }
+
+    sampleSelect.addEventListener('change', () => {
+      const opt = sampleSelect.selectedOptions[0];
+      if (!opt.value) return;
+      const force3d = opt.dataset.mode === '3d';
+      if (force3d) mode3dBox.checked = true;
+      loadUrl(opt.value, force3d);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files?.[0]) loadFile(fileInput.files[0]);
+    });
+
+    resetBtn.addEventListener('click', () => {
+      currentInstance?.resetCamera();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "name": "@morcad/moraya",
+  "version": "0.1.0",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "build:bundle": "vite build --config vite.bundle.config.ts",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@morcad/core": "workspace:*",
+    "three": "^0.170.0"
+  },
+  "peerDependencies": {
+    "@tauri-apps/api": "^2.9.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2.9.0",
+    "@types/three": "^0.170.0",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.0"
+  }
+}

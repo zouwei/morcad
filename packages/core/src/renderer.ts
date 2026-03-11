@@ -1,0 +1,304 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { aciToHex } from './aci-colors.js';
+import type { CadDocument, CadRenderOptions, CadLayer, BoundingBox, CadEntity } from './types.js';
+
+export class CadRenderer {
+  private scene: THREE.Scene;
+  private camera: THREE.OrthographicCamera | THREE.PerspectiveCamera;
+  private renderer: THREE.WebGLRenderer;
+  private controls: OrbitControls;
+  private layerGroups: Map<string, THREE.Group> = new Map();
+  private animationId: number | null = null;
+  private layers: CadLayer[] = [];
+  private is3D: boolean;
+
+  constructor(container: HTMLElement, options: CadRenderOptions) {
+    const height = options.height ?? 400;
+    this.is3D = options.mode === '3d';
+
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(this.resolveBackground(options));
+
+    const aspect = container.clientWidth / height;
+
+    if (this.is3D) {
+      const cam = new THREE.PerspectiveCamera(45, aspect, 0.1, 10000000);
+      cam.position.set(0, -500, 500);
+      cam.up.set(0, 0, 1);
+      this.camera = cam;
+    } else {
+      const cam = new THREE.OrthographicCamera(
+        -aspect * 500, aspect * 500, 500, -500, 0.1, 1000000
+      );
+      cam.position.set(0, 0, 100);
+      this.camera = cam;
+    }
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setSize(container.clientWidth, height);
+    container.appendChild(this.renderer.domElement);
+
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableRotate = this.is3D;
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.1;
+    this.controls.screenSpacePanning = true;
+
+    this.startRenderLoop();
+  }
+
+  private resolveBackground(options: CadRenderOptions): string {
+    if (options.backgroundColor) return options.backgroundColor;
+    const theme = options.theme ?? 'auto';
+    if (theme === 'dark') return '#1e1e1e';
+    if (theme === 'light') return '#f5f5f5';
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+      || document.body.classList.contains('theme-dark');
+    return isDark ? '#1e1e1e' : '#f5f5f5';
+  }
+
+  private startRenderLoop(): void {
+    const animate = () => {
+      this.animationId = requestAnimationFrame(animate);
+      this.controls.update();
+      this.renderer.render(this.scene, this.camera);
+    };
+    animate();
+  }
+
+  async loadDocument(doc: CadDocument): Promise<void> {
+    this.layers = doc.layers;
+
+    for (const layer of doc.layers) {
+      const group = new THREE.Group();
+      group.name = layer.name;
+      group.visible = layer.visible;
+      this.layerGroups.set(layer.name, group);
+      this.scene.add(group);
+    }
+
+    if (!this.layerGroups.has('0')) {
+      const g = new THREE.Group();
+      g.name = '0';
+      this.layerGroups.set('0', g);
+      this.scene.add(g);
+    }
+
+    // 坐标归一化：移除 XY 中心偏移，Z 从最小值归零
+    const ox = doc.boundingBox.centerX;
+    const oy = doc.boundingBox.centerY;
+    const { minZ: rawMinZ, maxZ: rawMaxZ } = this.computeZExtent(doc.entities);
+    const oz = rawMinZ;
+
+    for (const entity of doc.entities) {
+      const mesh = this.buildEntity(entity, doc, ox, oy, oz);
+      if (mesh) {
+        const layerName = entity.layer ?? '0';
+        const group = this.layerGroups.get(layerName) ?? this.layerGroups.get('0');
+        group?.add(mesh);
+      }
+    }
+
+    const zDepth = rawMaxZ - rawMinZ;
+    this.fitCameraToDocument(doc.boundingBox, zDepth);
+  }
+
+  private computeZExtent(entities: CadEntity[]): { minZ: number; maxZ: number } {
+    let minZ = 0, maxZ = 0;
+    const check = (z: number) => {
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    };
+    for (const e of entities) {
+      if (e.start?.z  != null) check(e.start.z);
+      if (e.end?.z    != null) check(e.end.z);
+      if (e.center?.z != null) check(e.center.z);
+      if (e.vertices) {
+        for (const v of e.vertices as { z?: number }[]) {
+          if (v.z != null) check(v.z);
+        }
+      }
+    }
+    return { minZ, maxZ };
+  }
+
+  private resolveEntityColor(entity: CadEntity, doc: CadDocument): string {
+    if (entity.color && entity.color !== 256) {
+      return aciToHex(entity.color);
+    }
+    const layer = doc.layers.find(l => l.name === (entity.layer ?? '0'));
+    return layer?.colorHex ?? '#ffffff';
+  }
+
+  private buildEntity(
+    entity: CadEntity,
+    doc: CadDocument,
+    ox: number,
+    oy: number,
+    oz: number,
+  ): THREE.Object3D | null {
+    const color = this.resolveEntityColor(entity, doc);
+    const mat = new THREE.LineBasicMaterial({ color });
+
+    switch (entity.type) {
+      case 'LINE':
+        return this.buildLine(entity, mat, ox, oy, oz);
+      case 'CIRCLE':
+        return this.buildCircle(entity, mat, ox, oy, oz);
+      case 'ARC':
+        return this.buildArc(entity, mat, ox, oy, oz);
+      case 'POLYLINE':
+      case 'LWPOLYLINE':
+        return this.buildPolyline(entity, mat, ox, oy, oz);
+      case '3DFACE':
+        return this.buildFace3D(entity, mat, ox, oy, oz);
+      default:
+        return null;
+    }
+  }
+
+  private buildLine(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.Line | null {
+    const start = e.start ?? e.vertices?.[0];
+    const end   = e.end   ?? e.vertices?.[1];
+    if (!start || !end) return null;
+    const points = [
+      new THREE.Vector3(start.x - ox, start.y - oy, (start.z ?? 0) - oz),
+      new THREE.Vector3(end.x   - ox, end.y   - oy, (end.z   ?? 0) - oz),
+    ];
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geo, mat);
+  }
+
+  private buildCircle(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.Line | null {
+    const cx = (e.center?.x ?? e.x ?? 0) - ox;
+    const cy = (e.center?.y ?? e.y ?? 0) - oy;
+    const cz = (e.center?.z ?? 0) - oz;
+    const r = e.radius ?? e.r ?? 1;
+
+    const segments = 64;
+    const points: THREE.Vector3[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      points.push(new THREE.Vector3(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, cz));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geo, mat);
+  }
+
+  private buildArc(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.Line | null {
+    const cx = (e.center?.x ?? e.x ?? 0) - ox;
+    const cy = (e.center?.y ?? e.y ?? 0) - oy;
+    const cz = (e.center?.z ?? 0) - oz;
+    const r = e.radius ?? e.r ?? 1;
+    let startAngle = (e.startAngle ?? 0) * (Math.PI / 180);
+    let endAngle = (e.endAngle ?? 360) * (Math.PI / 180);
+
+    if (endAngle < startAngle) endAngle += Math.PI * 2;
+
+    const segments = 64;
+    const points: THREE.Vector3[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const angle = startAngle + (i / segments) * (endAngle - startAngle);
+      points.push(new THREE.Vector3(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, cz));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geo, mat);
+  }
+
+  private buildPolyline(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.Line | null {
+    if (!e.vertices || e.vertices.length < 2) return null;
+    const points = e.vertices.map((v: { x: number; y: number; z?: number }) =>
+      new THREE.Vector3(v.x - ox, v.y - oy, (v.z ?? 0) - oz)
+    );
+    if (e.shape) points.push(points[0].clone());
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geo, mat);
+  }
+
+  private buildFace3D(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.LineSegments | null {
+    // 3DFACE: 4 vertices forming a quad (or tri if v3===v4); render as wireframe edges
+    const verts = e.vertices as { x: number; y: number; z?: number }[] | undefined;
+    if (!verts || verts.length < 3) return null;
+
+    const v = verts.map(pt => new THREE.Vector3(pt.x - ox, pt.y - oy, (pt.z ?? 0) - oz));
+    const v3 = v[3] ?? v[2]; // triangular face if v3 same as v2
+
+    // Edges: 0-1, 1-2, 2-3, 3-0
+    const points = [v[0], v[1], v[1], v[2], v[2], v3, v3, v[0]];
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.LineSegments(geo, mat);
+  }
+
+  private fitCameraToDocument(bb: BoundingBox, zDepth: number): void {
+    if (this.is3D) {
+      this.fitCamera3D(bb, zDepth);
+    } else {
+      this.fitCamera2D(bb);
+    }
+  }
+
+  private fitCamera2D(bb: BoundingBox): void {
+    const padding = 1.1;
+    const halfW = (bb.width * padding) / 2;
+    const halfH = (bb.height * padding) / 2;
+    const aspect = this.renderer.domElement.width / this.renderer.domElement.height;
+
+    const cam = this.camera as THREE.OrthographicCamera;
+    const halfSize = Math.max(halfW / aspect, halfH);
+    cam.left   = -halfSize * aspect;
+    cam.right  =  halfSize * aspect;
+    cam.top    =  halfSize;
+    cam.bottom = -halfSize;
+    cam.position.set(0, 0, 100);
+    cam.updateProjectionMatrix();
+    this.controls.target.set(0, 0, 0);
+    this.controls.update();
+  }
+
+  private fitCamera3D(bb: BoundingBox, zDepth: number): void {
+    // Model is centred at (0,0) in XY after normalisation, and spans [0, zDepth] in Z.
+    const cz = zDepth / 2;   // vertical centre of the model
+    const maxExtent = Math.max(bb.width, bb.height, zDepth, 1);
+    const dist = maxExtent * 1.6;
+
+    const cam = this.camera as THREE.PerspectiveCamera;
+    // Isometric-ish angle: camera at 45° azimuth, ~35° elevation
+    cam.position.set(dist * 0.8, -dist * 0.8, cz + dist * 0.7);
+    cam.up.set(0, 0, 1);
+    cam.lookAt(0, 0, cz);
+    cam.updateProjectionMatrix();
+    this.controls.target.set(0, 0, cz);
+    this.controls.update();
+  }
+
+  setLayerVisibility(layerName: string, visible: boolean): void {
+    const group = this.layerGroups.get(layerName);
+    if (group) group.visible = visible;
+  }
+
+  resetCamera(): void {
+    this.controls.reset();
+  }
+
+  getLayers(): CadLayer[] {
+    return this.layers;
+  }
+
+  dispose(): void {
+    if (this.animationId !== null) cancelAnimationFrame(this.animationId);
+
+    this.scene.traverse(obj => {
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.Line || obj instanceof THREE.LineSegments) {
+        obj.geometry.dispose();
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const m of mats) m.dispose();
+      }
+    });
+
+    this.controls.dispose();
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
+  }
+}

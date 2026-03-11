@@ -1,0 +1,19 @@
+{
+  "name": "morcad",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:core": "pnpm --filter @morcad/core build",
+    "build:moraya": "pnpm --filter @morcad/moraya build",
+    "dev:core": "pnpm --filter @morcad/core dev",
+    "dev:demo": "pnpm --filter @morcad/example-vanilla dev",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint packages/*/src --ext .ts"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2",
+    "eslint": "^9.0.0",
+    "@typescript-eslint/parser": "^8.0.0"
+  }
+}
