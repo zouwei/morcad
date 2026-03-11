@@ -12,6 +12,7 @@
   "scripts": {
     "build": "vite build",
     "build:bundle": "vite build --config vite.bundle.config.ts",
+    "dev:bundle": "vite build --watch --config vite.bundle.config.ts",
     "dev": "vite build --watch",
     "typecheck": "tsc --noEmit"
   },

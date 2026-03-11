@@ -14,10 +14,8 @@
  */
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
-import dts from 'vite-plugin-dts';
 
 export default defineConfig({
-  plugins: [dts({ include: ['src'] })],
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
@@ -29,6 +27,10 @@ export default defineConfig({
       // @tauri-apps/api/core is still external: it is provided by the Tauri
       // WebView environment at runtime and cannot be bundled.
       external: ['@tauri-apps/api', '@tauri-apps/api/core'],
+      output: {
+        // 固定 chunk 文件名，避免 hash 变化导致 CDN 缓存失效
+        chunkFileNames: '[name].js',
+      },
     },
     outDir: 'dist',
     sourcemap: true,

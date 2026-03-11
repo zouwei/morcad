@@ -6,7 +6,9 @@
     "build": "pnpm -r build",
     "build:core": "pnpm --filter @morcad/core build",
     "build:moraya": "pnpm --filter @morcad/moraya build",
+    "build:moraya:bundle": "pnpm --filter @morcad/moraya build:bundle",
     "dev:core": "pnpm --filter @morcad/core dev",
+    "dev:moraya": "pnpm --filter @morcad/moraya dev:bundle",
     "dev:demo": "pnpm --filter @morcad/example-vanilla dev",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint packages/*/src --ext .ts"

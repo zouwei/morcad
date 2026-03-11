@@ -4,6 +4,8 @@ node_modules/
 # ── 构建产物 ──────────────────────────────────────
 dist/
 *.tsbuildinfo
+# Moraya 插件 bundle 需要提交到 GitHub 供 jsDelivr CDN 分发
+!packages/moraya/dist/
 
 # ── 环境变量 ──────────────────────────────────────
 .env
