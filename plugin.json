@@ -5,11 +5,14 @@
   "description": "Renders DXF/DWG engineering drawings inline as code blocks",
   "author": "zouwei",
   "license": "GPL-3.0",
-  "apiVersion": "1.0",
+  "apiVersion": "1",
   "entry": {
-    "main": "packages/moraya/dist/index.bundle.js"
+    "darwin-aarch64": "bin/morcad",
+    "darwin-x86_64": "bin/morcad",
+    "win32": "bin/morcad.exe",
+    "linux-x86_64": "bin/morcad"
   },
-  "protocol": "stdio",
+  "protocol": "jsonrpc-stdio",
   "permissions": ["editor:read"],
   "permissionReasons": {
     "editor:read": "Read current document path to resolve relative DXF/DWG file paths"
