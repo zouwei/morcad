@@ -7,19 +7,16 @@
   "license": "GPL-3.0",
   "apiVersion": "1",
   "entry": {
-    "main": "packages/moraya/dist/index.bundle.js"
+    "darwin-aarch64": "bin/morcad",
+    "darwin-x86_64": "bin/morcad",
+    "win32": "bin/morcad.exe",
+    "linux-x86_64": "bin/morcad"
   },
   "protocol": "jsonrpc-stdio",
   "permissions": ["editor:read"],
   "permissionReasons": {
     "editor:read": "Read current document path to resolve relative DXF file paths"
   },
-  "homepage": "https://github.com/zouwei/morcad",
-  "npmPackage": "@morcad/moraya",
-  "exportName": "cadRendererPlugin",
-  "sizeKb": 800,
-  "languages": ["morcad", "dxf", "dwg"],
-  "cdnUrl": "https://cdn.jsdelivr.net/gh/zouwei/morcad@main/packages/moraya/dist/index.bundle.js",
-  "isFilePathRenderer": true,
-  "aiHint": "Use ```dxf for DXF files, ```dwg for DWG files, or ```morcad for parameter mode. Examples:\n```dxf\n./drawings/floor-plan.dxf\n```\n```morcad\nfile: ./drawings/floor-plan.dxf\nlayers: WALLS, DOORS\nheight: 500\n```"
+  "sandboxLevel": "standard",
+  "homepage": "https://github.com/zouwei/morcad"
 }
