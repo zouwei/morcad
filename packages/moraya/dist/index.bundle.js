@@ -16929,7 +16929,9 @@ class vm {
     this.renderer = new Wp({ antialias: !0 }), this.renderer.setPixelRatio(window.devicePixelRatio), this.renderer.setSize(e.clientWidth, n), e.appendChild(this.renderer.domElement), this.controls = new sm(this.camera, this.renderer.domElement), this.controls.enableRotate = this.is3D, this.controls.enableDamping = !0, this.controls.dampingFactor = 0.1, this.controls.screenSpacePanning = !0, this.startRenderLoop();
   }
   resolveBackground(e) {
-    return e.backgroundColor ? e.backgroundColor : (e.theme ?? "auto") === "light" ? "#f5f5f5" : "#1e1e1e";
+    if (e.backgroundColor) return e.backgroundColor;
+    const t = e.theme ?? "auto";
+    return t === "dark" ? "#1e1e1e" : t === "light" ? "#f5f5f5" : document.documentElement.getAttribute("data-theme") === "dark" || document.body.classList.contains("theme-dark") ? "#1e1e1e" : "#f5f5f5";
   }
   startRenderLoop() {
     const e = () => {
@@ -17118,54 +17120,50 @@ class vm {
   }
 }
 class xm {
-  constructor(e, t, n = !1) {
-    this.panel = null, this.layerStates = /* @__PURE__ */ new Map(), this.container = e, this.onToggle = t, this.isDark = n;
+  constructor(e, t) {
+    this.panel = null, this.layerStates = /* @__PURE__ */ new Map(), this.container = e, this.onToggle = t;
   }
   render(e) {
     this.panel && this.panel.remove();
-    for (const l of e)
-      this.layerStates.set(l.name, l.visible);
-    const t = this.isDark, n = t ? "rgba(50,50,50,0.75)" : "rgba(240,240,240,0.88)", r = t ? "#eee" : "#333", s = t ? "#aaa" : "#666", o = t ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)";
+    for (const n of e)
+      this.layerStates.set(n.name, n.visible);
     this.panel = document.createElement("div"), Object.assign(this.panel.style, {
       position: "absolute",
       top: "8px",
       right: "8px",
-      background: n,
-      color: r,
+      background: "rgba(30,30,30,0.85)",
+      color: "#eee",
       borderRadius: "6px",
       padding: "6px 8px",
       fontSize: "12px",
       fontFamily: "monospace",
       maxHeight: "200px",
-      maxWidth: "140px",
-      minWidth: "100px",
       overflowY: "auto",
       zIndex: "10",
       backdropFilter: "blur(4px)",
-      userSelect: "none",
-      boxShadow: t ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(0,0,0,0.15)"
+      userSelect: "none"
     });
-    const a = document.createElement("div");
-    a.textContent = "Layers", Object.assign(a.style, { fontWeight: "bold", marginBottom: "4px", color: s, fontSize: "11px" }), this.panel.appendChild(a);
-    for (const l of e) {
-      const c = document.createElement("label");
-      Object.assign(c.style, { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", padding: "2px 0" });
-      const h = document.createElement("input");
-      h.type = "checkbox", h.checked = l.visible, h.style.accentColor = l.colorHex, h.addEventListener("change", () => {
-        this.layerStates.set(l.name, h.checked), this.onToggle(l.name, h.checked);
+    const t = document.createElement("div");
+    t.textContent = "Layers", Object.assign(t.style, { fontWeight: "bold", marginBottom: "4px", color: "#aaa", fontSize: "11px" }), this.panel.appendChild(t);
+    for (const n of e) {
+      const r = document.createElement("label");
+      Object.assign(r.style, { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", padding: "2px 0" });
+      const s = document.createElement("input");
+      s.type = "checkbox", s.checked = n.visible, s.style.accentColor = n.colorHex, s.addEventListener("change", () => {
+        this.layerStates.set(n.name, s.checked), this.onToggle(n.name, s.checked);
       });
-      const d = document.createElement("span");
-      Object.assign(d.style, {
+      const o = document.createElement("span");
+      Object.assign(o.style, {
         display: "inline-block",
         width: "10px",
         height: "10px",
         borderRadius: "2px",
-        background: l.colorHex,
-        border: `1px solid ${o}`,
+        background: n.colorHex,
+        border: "1px solid rgba(255,255,255,0.2)",
         flexShrink: "0"
       });
-      const p = document.createElement("span");
-      p.textContent = l.name, p.style.overflow = "hidden", p.style.textOverflow = "ellipsis", p.style.whiteSpace = "nowrap", c.appendChild(h), c.appendChild(d), c.appendChild(p), this.panel.appendChild(c);
+      const a = document.createElement("span");
+      a.textContent = n.name, a.style.overflow = "hidden", a.style.textOverflow = "ellipsis", a.style.whiteSpace = "nowrap", r.appendChild(s), r.appendChild(o), r.appendChild(a), this.panel.appendChild(r);
     }
     getComputedStyle(this.container).position === "static" && (this.container.style.position = "relative"), this.container.appendChild(this.panel);
   }
@@ -17174,21 +17172,18 @@ class xm {
     (e = this.panel) == null || e.remove(), this.panel = null;
   }
 }
-function Mm() {
-  return document.documentElement.getAttribute("data-theme") === "dark" || document.body.classList.contains("theme-dark");
-}
-async function Sm(i, e, t, n) {
+async function Mm(i, e, t, n) {
   const r = n ?? {}, s = t.toLowerCase().endsWith(".dwg") ? await im(e, r.dwgWasmBaseUrl) : Qp(new TextDecoder().decode(e)), o = new vm(i, r);
   await o.loadDocument(s);
-  const a = r.theme === "dark" || r.theme !== "light" && Mm(), l = r.showLayerPanel !== !1 ? new xm(i, (c, h) => {
-    o.setLayerVisibility(c, h);
-  }, a) : null;
-  return l == null || l.render(s.layers), {
+  const a = r.showLayerPanel !== !1 ? new xm(i, (l, c) => {
+    o.setLayerVisibility(l, c);
+  }) : null;
+  return a == null || a.render(s.layers), {
     dispose() {
-      l == null || l.dispose(), o.dispose();
+      a == null || a.dispose(), o.dispose();
     },
-    setLayerVisibility(c, h) {
-      o.setLayerVisibility(c, h);
+    setLayerVisibility(l, c) {
+      o.setLayerVisibility(l, c);
     },
     resetCamera() {
       o.resetCamera();
@@ -17215,7 +17210,7 @@ function sl(i) {
       theme: r ? "dark" : "light",
       ...o
     };
-    return Sm(e, l, s, c);
+    return Mm(e, l, s, c);
   };
 }
 const al = {
@@ -17226,8 +17221,8 @@ const al = {
   resolvePath(i, e) {
     return e ? `${e.replace(/[/\\][^/\\]+$/, "")}/${i.replace(/^\.\//, "")}` : i;
   }
-}, Em = sl(al);
-function ym(i) {
+}, Sm = sl(al);
+function Em(i) {
   return {
     async readFile(e) {
       const t = await i(e);
@@ -17236,7 +17231,7 @@ function ym(i) {
     resolvePath: al.resolvePath
   };
 }
-const Am = {
+const Tm = {
   id: "cad-viewer",
   name: "CAD Viewer (DXF/DWG)",
   description: "Renders AutoCAD DXF/DWG engineering drawings inline. DWG support uses a GPLv3 WASM module loaded on demand.",
@@ -17252,13 +17247,13 @@ const Am = {
   async render(i, e, t, n) {
     const r = document.documentElement.getAttribute("data-theme") === "dark";
     return typeof t == "function" ? sl(
-      ym(t)
-    )(i, e, n ?? null, r) : Em(i, e, n ?? null, r);
+      Em(t)
+    )(i, e, n ?? null, r) : Sm(i, e, n ?? null, r);
   }
 };
 export {
-  Em as cadRender,
-  Am as cadRendererPlugin,
+  Sm as cadRender,
+  Tm as cadRendererPlugin,
   al as tauriFileAdapter
 };
 //# sourceMappingURL=index.bundle.js.map
