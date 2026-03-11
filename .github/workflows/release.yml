@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build core
+        run: pnpm build:core
+
       - name: Build bundle
         run: pnpm build:moraya:bundle
 
