@@ -7,12 +7,9 @@
   "license": "GPL-3.0",
   "apiVersion": "1",
   "entry": {
-    "darwin-aarch64": "bin/morcad",
-    "darwin-x86_64": "bin/morcad",
-    "win32": "bin/morcad.exe",
-    "linux-x86_64": "bin/morcad"
+    "main": "packages/moraya/dist/index.bundle.js"
   },
-  "protocol": "jsonrpc-stdio",
+  "protocol": "stdio",
   "permissions": ["editor:read"],
   "permissionReasons": {
     "editor:read": "Read current document path to resolve relative DXF/DWG file paths"
