@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build bundle
+        run: pnpm build:moraya:bundle
+
+      - name: Update version in plugin.json
+        run: |
+          TAG=${GITHUB_REF_NAME#v}
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('plugin.json', 'utf8'));
+            p.version = '$TAG';
+            fs.writeFileSync('plugin.json', JSON.stringify(p, null, 2) + '\n');
+          "
+
+      - name: Commit dist and plugin.json to main
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/moraya/dist/ plugin.json
+          git diff --cached --quiet || git commit -m "chore: build bundle for ${{ github.ref_name }}"
+          git push origin HEAD:main
+
+      - name: Package release zip
+        run: |
+          TAG=${{ github.ref_name }}
+          mkdir -p release-pkg
+          cp plugin.json release-pkg/
+          cp -r packages/moraya/dist release-pkg/
+          cd release-pkg
+          zip -r ../morcad-${TAG}.zip .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: morcad-${{ github.ref_name }}.zip
+          generate_release_notes: true
