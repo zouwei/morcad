@@ -1,0 +1,16 @@
+{
+  "id": "cad-viewer",
+  "name": "CAD Viewer (DXF/DWG)",
+  "version": "0.1.0",
+  "description": "Renders AutoCAD DXF/DWG engineering drawings inline. DWG support uses a GPLv3 WASM module loaded on demand.",
+  "author": "zouwei",
+  "license": "GPL-3.0",
+  "homepage": "https://github.com/zouwei/morcad",
+  "npmPackage": "@morcad/moraya",
+  "exportName": "",
+  "sizeKb": 800,
+  "languages": ["morcad", "dxf", "dwg"],
+  "cdnUrl": "https://cdn.jsdelivr.net/gh/zouwei/morcad@main/packages/moraya/dist/index.bundle.js",
+  "isFilePathRenderer": true,
+  "aiHint": "Use ```dxf for DXF files, ```dwg for DWG files, or ```morcad for parameter mode. Examples:\n```dxf\n./drawings/floor-plan.dxf\n```\n```morcad\nfile: ./drawings/floor-plan.dxf\nlayers: WALLS, DOORS\nheight: 500\n```"
+}
