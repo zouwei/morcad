@@ -6,6 +6,9 @@
   "author": "zouwei",
   "license": "GPL-3.0",
   "apiVersion": "1",
+  "entry": {
+    "main": "packages/moraya/dist/index.bundle.js"
+  },
   "homepage": "https://github.com/zouwei/morcad",
   "npmPackage": "@morcad/moraya",
   "exportName": "cadRendererPlugin",
