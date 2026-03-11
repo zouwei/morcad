@@ -125,8 +125,16 @@ export class CadRenderer {
   }
 
   private resolveEntityColor(entity: CadEntity, doc: CadDocument): string {
-    if (entity.color && entity.color !== 256) {
-      return aciToHex(entity.color);
+    // dxf-parser sets colorIndex (ACI) + color (24-bit RGB); parser-dwg sets color (ACI)
+    if (entity.colorIndex != null) {
+      // DXF path: colorIndex 0 = ByBlock, 256 = ByLayer; otherwise explicit color
+      const idx = entity.colorIndex as number;
+      if (idx !== 0 && idx !== 256 && entity.color != null) {
+        return '#' + (entity.color as number).toString(16).padStart(6, '0');
+      }
+    } else if (entity.color != null && entity.color !== 256) {
+      // DWG path: color field stores ACI index
+      return aciToHex(entity.color as number);
     }
     const layer = doc.layers.find(l => l.name === (entity.layer ?? '0'));
     return layer?.colorHex ?? '#ffffff';
@@ -154,6 +162,12 @@ export class CadRenderer {
         return this.buildPolyline(entity, mat, ox, oy, oz);
       case '3DFACE':
         return this.buildFace3D(entity, mat, ox, oy, oz);
+      case 'SPLINE':
+        return this.buildSpline(entity, mat, ox, oy, oz);
+      case 'ELLIPSE':
+        return this.buildEllipse(entity, mat, ox, oy, oz);
+      case 'SOLID':
+        return this.buildSolid(entity, mat, ox, oy, oz);
       default:
         return null;
     }
@@ -213,6 +227,60 @@ export class CadRenderer {
       new THREE.Vector3(v.x - ox, v.y - oy, (v.z ?? 0) - oz)
     );
     if (e.shape) points.push(points[0].clone());
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geo, mat);
+  }
+
+  private buildSpline(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.Line | null {
+    // Approximate spline using fit points (on-curve) or control points as fallback
+    const pts: { x: number; y: number; z?: number }[] =
+      (e.fitPoints?.length > 0 ? e.fitPoints : e.controlPoints) ?? [];
+    if (pts.length < 2) return null;
+    const points = pts.map((p: { x: number; y: number; z?: number }) =>
+      new THREE.Vector3(p.x - ox, p.y - oy, (p.z ?? 0) - oz)
+    );
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geo, mat);
+  }
+
+  private buildEllipse(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.Line | null {
+    const cx = (e.center?.x ?? 0) - ox;
+    const cy = (e.center?.y ?? 0) - oy;
+    const cz = (e.center?.z ?? 0) - oz;
+    const majorX = e.majorAxisEndPoint?.x ?? 1;
+    const majorY = e.majorAxisEndPoint?.y ?? 0;
+    const majorLen = Math.sqrt(majorX * majorX + majorY * majorY);
+    if (majorLen === 0) return null;
+    const majorAngle = Math.atan2(majorY, majorX);
+    const minorLen = majorLen * (e.axisRatio ?? 1);
+    // DXF ellipse angles are in radians
+    const startA = e.startAngle ?? 0;
+    let endA = e.endAngle ?? (Math.PI * 2);
+    if (endA <= startA) endA += Math.PI * 2;
+    const segs = 72;
+    const points: THREE.Vector3[] = [];
+    for (let i = 0; i <= segs; i++) {
+      const t = startA + (i / segs) * (endA - startA);
+      const ex = Math.cos(t) * majorLen;
+      const ey = Math.sin(t) * minorLen;
+      points.push(new THREE.Vector3(
+        cx + ex * Math.cos(majorAngle) - ey * Math.sin(majorAngle),
+        cy + ex * Math.sin(majorAngle) + ey * Math.cos(majorAngle),
+        cz,
+      ));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geo, mat);
+  }
+
+  private buildSolid(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.Line | null {
+    // dxf-parser SOLID uses entity.points[0..3]; DWG parser already converts to POLYLINE
+    const pts: { x: number; y: number; z?: number }[] = e.points ?? e.vertices ?? [];
+    if (pts.length < 3) return null;
+    const p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3] ?? pts[2];
+    // DXF winding: 0,1,3,2 (not 0,1,2,3)
+    const ordered = [p0, p1, p3, p2, p0];
+    const points = ordered.map(p => new THREE.Vector3(p.x - ox, p.y - oy, (p.z ?? 0) - oz));
     const geo = new THREE.BufferGeometry().setFromPoints(points);
     return new THREE.Line(geo, mat);
   }
