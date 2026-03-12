@@ -372,10 +372,26 @@ export class CadRenderer {
   private buildSolidFill(e: CadEntity, color: string, ox: number, oy: number, oz: number): THREE.Mesh | null {
     const raw = e.vertices as { x: number; y: number; z?: number }[] | undefined;
     if (!raw || raw.length < 3) return null;
-    const pts = raw.filter(v => isFinite(v.x) && isFinite(v.y));
+    const all = raw.filter(v => isFinite(v.x) && isFinite(v.y));
+    if (all.length < 3) return null;
+
+    // IQR-based outlier filtering to remove corrupted extreme vertices.
+    // Uses max(IQR, 5% of full range) as minimum fence so the filter
+    // never collapses when many vertices share the same coordinate.
+    const n = all.length;
+    const xs = all.map(v => v.x).sort((a, b) => a - b);
+    const ys = all.map(v => v.y).sort((a, b) => a - b);
+    const q1x = xs[Math.floor(n * 0.25)], q3x = xs[Math.floor(n * 0.75)];
+    const q1y = ys[Math.floor(n * 0.25)], q3y = ys[Math.floor(n * 0.75)];
+    const fenceX = Math.max(q3x - q1x, (xs[n - 1] - xs[0]) * 0.05) * 4;
+    const fenceY = Math.max(q3y - q1y, (ys[n - 1] - ys[0]) * 0.05) * 4;
+    const pts = all.filter(v =>
+      v.x >= q1x - fenceX && v.x <= q3x + fenceX &&
+      v.y >= q1y - fenceY && v.y <= q3y + fenceY,
+    );
     if (pts.length < 3) return null;
 
-    // Bounding box
+    // Bounding box of cleaned vertices
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const v of pts) {
       if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
@@ -383,7 +399,6 @@ export class CadRenderer {
     }
     const w = maxX - minX, h = maxY - minY;
     if (w + h < 1e-10) return null;
-    // Skip spike-like degenerate shapes
     if (Math.max(w, h) / Math.max(Math.min(w, h), 1e-10) > 500) return null;
 
     // Use HTML Canvas with evenodd fill rule — correctly handles DWG HATCH boundaries
@@ -404,7 +419,7 @@ export class CadRenderer {
     ctx.beginPath();
     for (let i = 0; i < pts.length; i++) {
       const px = (pts[i].x - minX) * scale + 1;
-      const py = (maxY - pts[i].y) * scale + 1; // Y-flip for canvas
+      const py = (maxY - pts[i].y) * scale + 1; // Y-flip: canvas Y grows down, world Y grows up
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
@@ -414,7 +429,7 @@ export class CadRenderer {
     const geo = new THREE.PlaneGeometry(w, h);
     const mat = new THREE.MeshBasicMaterial({
       map: texture,
-      transparent: false,
+      transparent: true,   // canvas background is transparent — must be true
       side: THREE.DoubleSide,
       depthWrite: false,
     });
