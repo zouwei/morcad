@@ -43,12 +43,10 @@ pnpm build:core
 pnpm build:moraya:bundle
 
 echo "==> Staging and committing..."
-git add \
-  packages/core/package.json \
-  packages/moraya/package.json \
-  packages/moraya/src/index.ts \
-  plugin.json \
-  packages/moraya/dist/
+# Stage all tracked modifications (safer than listing individual files)
+git add -u
+# Also stage the moraya dist (it may be untracked on first run)
+git add packages/moraya/dist/
 
 git commit -m "chore: release ${TAG}"
 
