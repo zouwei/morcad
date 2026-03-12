@@ -264,22 +264,9 @@ function mapEntity(e: any, db: any, depth = 0): CadEntity | CadEntity[] | null {
           }
           continue;
         }
-        // Edge-based boundary path
+        // Edge-based boundary path — render as individual edges (outlines)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const edges: any[] = path.edges ?? [];
-        if (isSolid && edges.length > 0) {
-          // Collect all edge start points to build a polygon
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const verts: any[] = [];
-          for (const edge of edges) {
-            if (edge.type === 1 /* Line */) verts.push({ x: edge.start.x, y: edge.start.y, z: 0 });
-            else if (edge.type === 2 /* CircularArc */) verts.push({ x: edge.center.x + edge.radius * Math.cos(edge.startAngle), y: edge.center.y + edge.radius * Math.sin(edge.startAngle), z: 0 });
-          }
-          if (verts.length >= 3) {
-            result.push({ ...base, type: 'SOLID_FILL', vertices: verts });
-            continue;
-          }
-        }
         for (const edge of edges) {
           if (edge.type === 1 /* Line */) {
             result.push({ ...base, type: 'LINE', start: edge.start, end: edge.end });
