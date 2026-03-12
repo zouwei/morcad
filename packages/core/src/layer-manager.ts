@@ -33,7 +33,7 @@ export class LayerManager {
     this.panel = document.createElement('div');
     Object.assign(this.panel.style, {
       position: 'absolute',
-      top: '8px',
+      top: '13px',
       right: '8px',
       background: bg,
       color: fg,
@@ -92,10 +92,12 @@ export class LayerManager {
       this.panel.appendChild(row);
     }
 
-    // Make container relatively positioned for absolute panel overlay
+    // Make container relatively positioned for absolute panel overlay.
+    // Also clip horizontal overflow so the canvas never causes a scrollbar.
     if (getComputedStyle(this.container).position === 'static') {
       this.container.style.position = 'relative';
     }
+    this.container.style.overflowX = 'hidden';
     this.container.appendChild(this.panel);
   }
 

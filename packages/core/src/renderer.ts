@@ -38,6 +38,9 @@ export class CadRenderer {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(container.clientWidth, height);
+    // display:block removes the inline-baseline gap; margin-top adds the requested top gap.
+    this.renderer.domElement.style.display = 'block';
+    this.renderer.domElement.style.marginTop = '5px';
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
