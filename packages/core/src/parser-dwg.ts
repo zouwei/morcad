@@ -264,9 +264,30 @@ function mapEntity(e: any, db: any, depth = 0): CadEntity | CadEntity[] | null {
           }
           continue;
         }
-        // Edge-based boundary path — render as individual edges (outlines)
+        // Edge-based boundary path
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const edges: any[] = path.edges ?? [];
+        if (isSolid && edges.length >= 3) {
+          // For solid fills, collect edge start points to form a polygon.
+          // Individual edge outlines would appear as scattered dashes — suppress them.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const solidVerts: any[] = [];
+          for (const edge of edges) {
+            if (edge.type === 1 /* Line */) {
+              solidVerts.push({ x: edge.start.x, y: edge.start.y, z: 0 });
+            } else if (edge.type === 2 /* CircularArc */) {
+              solidVerts.push({
+                x: edge.center.x + edge.radius * Math.cos(edge.startAngle),
+                y: edge.center.y + edge.radius * Math.sin(edge.startAngle),
+                z: 0,
+              });
+            }
+          }
+          if (solidVerts.length >= 3) {
+            result.push({ ...base, type: 'SOLID_FILL', vertices: solidVerts });
+          }
+          continue;
+        }
         for (const edge of edges) {
           if (edge.type === 1 /* Line */) {
             result.push({ ...base, type: 'LINE', start: edge.start, end: edge.end });
@@ -309,8 +330,11 @@ function mapEntity(e: any, db: any, depth = 0): CadEntity | CadEntity[] | null {
       };
 
     case 'ATTDEF':
+      // Block attribute definitions — invisible in normal view, skip
+      return null;
+
     case 'ATTRIB': {
-      // DwgAttdefEntity / DwgAttribEntity: text is a nested DwgTextBase object
+      // DwgAttribEntity: text is a nested DwgTextBase object
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tb = e.text as Record<string, any> | null; // DwgTextBase
       const attrText = String(tb?.text ?? e.tag ?? '');

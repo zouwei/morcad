@@ -188,7 +188,6 @@ export class CadRenderer {
       case 'SOLID':
         return this.buildSolid(entity, mat, ox, oy, oz);
       case 'TEXT':
-      case 'ATTDEF':
       case 'ATTRIB':
       case 'MTEXT':
         return this.buildText(entity, color, ox, oy, oz);
@@ -375,20 +374,20 @@ export class CadRenderer {
     if (!raw || raw.length < 3) return null;
 
     // Filter non-finite coordinates
-    const finite = raw.filter(v => isFinite(v.x) && isFinite(v.y));
-    if (finite.length < 3) return null;
-
-    // IQR-based outlier rejection to remove degenerate "spike" vertices
-    const xs = finite.map(v => v.x).sort((a, b) => a - b);
-    const ys = finite.map(v => v.y).sort((a, b) => a - b);
-    const q1x = xs[Math.floor(xs.length * 0.25)], q3x = xs[Math.floor(xs.length * 0.75)];
-    const q1y = ys[Math.floor(ys.length * 0.25)], q3y = ys[Math.floor(ys.length * 0.75)];
-    const iqrX = q3x - q1x, iqrY = q3y - q1y;
-    const fence = 3; // generous multiplier to keep legitimate vertices
-    const loX = q1x - fence * iqrX, hiX = q3x + fence * iqrX;
-    const loY = q1y - fence * iqrY, hiY = q3y + fence * iqrY;
-    const verts = finite.filter(v => v.x >= loX && v.x <= hiX && v.y >= loY && v.y <= hiY);
+    const verts = raw.filter(v => isFinite(v.x) && isFinite(v.y));
     if (verts.length < 3) return null;
+
+    // Compute bounding box
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const v of verts) {
+      if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+      if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+    }
+    const w = maxX - minX, h = maxY - minY;
+    if (w + h < 1e-10) return null;
+    // Skip spike-like shapes: bounding box aspect ratio > 500 means degenerate polygon
+    const aspect = Math.max(w, h) / Math.max(Math.min(w, h), 1e-10);
+    if (aspect > 500) return null;
 
     const shape = new THREE.Shape();
     shape.moveTo(verts[0].x - ox, verts[0].y - oy);
