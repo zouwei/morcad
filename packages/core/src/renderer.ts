@@ -12,10 +12,12 @@ export class CadRenderer {
   private animationId: number | null = null;
   private layers: CadLayer[] = [];
   private is3D: boolean;
+  private isDark: boolean;
 
   constructor(container: HTMLElement, options: CadRenderOptions) {
     const height = options.height ?? 400;
     this.is3D = options.mode === '3d';
+    this.isDark = options.theme !== 'light';
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(this.resolveBackground(options));
@@ -130,15 +132,25 @@ export class CadRenderer {
     if (entity.colorIndex != null) {
       // DXF path: colorIndex 0 = ByBlock, 256 = ByLayer; otherwise explicit color
       const idx = entity.colorIndex as number;
-      if (idx !== 0 && idx !== 256 && entity.color != null) {
-        return '#' + (entity.color as number).toString(16).padStart(6, '0');
+      if (idx !== 0 && idx !== 256) {
+        // Try 24-bit RGB first, fall back to direct ACI lookup
+        const hex = entity.color != null
+          ? '#' + (entity.color as number).toString(16).padStart(6, '0')
+          : aciToHex(idx);
+        return this.themeAdaptColor(hex);
       }
     } else if (entity.color != null && entity.color !== 256) {
       // DWG path: color field stores ACI index
-      return aciToHex(entity.color as number);
+      return this.themeAdaptColor(aciToHex(entity.color as number));
     }
     const layer = doc.layers.find(l => l.name === (entity.layer ?? '0'));
-    return layer?.colorHex ?? '#ffffff';
+    return this.themeAdaptColor(layer?.colorHex ?? '#ffffff');
+  }
+
+  /** ACI 7 is "white/black" (context-dependent in AutoCAD). Show as near-black on light themes. */
+  private themeAdaptColor(hex: string): string {
+    if (!this.isDark && hex.toLowerCase() === '#ffffff') return '#1a1a1a';
+    return hex;
   }
 
   private buildEntity(
@@ -169,6 +181,11 @@ export class CadRenderer {
         return this.buildEllipse(entity, mat, ox, oy, oz);
       case 'SOLID':
         return this.buildSolid(entity, mat, ox, oy, oz);
+      case 'TEXT':
+      case 'ATTDEF':
+      case 'ATTRIB':
+      case 'MTEXT':
+        return this.buildText(entity, color, ox, oy, oz);
       default:
         return null;
     }
@@ -286,6 +303,65 @@ export class CadRenderer {
     return new THREE.Line(geo, mat);
   }
 
+  private buildText(
+    e: CadEntity,
+    color: string,
+    ox: number,
+    oy: number,
+    oz: number,
+  ): THREE.Object3D | null {
+    // TEXT uses startPoint; MTEXT uses position; ATTDEF/ATTRIB use startPoint or position
+    const rawText = (e.text ?? e.string ?? '') as string;
+    if (!rawText) return null;
+
+    // Strip AutoCAD MTEXT formatting codes: {\...;content}, \P (paragraph break), \~ etc.
+    const text = rawText
+      .replace(/\{\\[^;]*;([^}]*)\}/g, '$1')
+      .replace(/\\[Pp]/g, ' ')
+      .replace(/\\[A-Za-z][^;]*;/g, '')
+      .replace(/[{}]/g, '')
+      .trim();
+    if (!text) return null;
+
+    const pos = e.startPoint ?? e.insertionPoint ?? e.position ?? { x: 0, y: 0, z: 0 };
+    const height = Math.max(Number(e.textHeight ?? e.height ?? 1), 0.01);
+    const rotation = ((e.rotation ?? 0) * Math.PI) / 180;
+
+    // Build canvas texture
+    const fontSize = 32;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    ctx.font = `${fontSize}px sans-serif`;
+    const textW = ctx.measureText(text).width;
+    canvas.width = Math.ceil(textW) + 4;
+    canvas.height = fontSize + 8;
+    // Re-apply font after canvas resize (resize resets context state)
+    ctx.font = `${fontSize}px sans-serif`;
+    ctx.fillStyle = color;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+    const sprite = new THREE.Sprite(material);
+
+    const aspect = canvas.width / canvas.height;
+    sprite.scale.set(height * aspect, height, 1);
+    sprite.position.set(pos.x - ox, pos.y - oy, (pos.z ?? 0) - oz);
+    // THREE.Sprite doesn't support rotation natively; encode it in material if needed
+    // For non-zero rotations, use a workaround: rotate the sprite's parent group
+    if (rotation !== 0) {
+      const group = new THREE.Group();
+      group.rotation.z = rotation;
+      group.position.copy(sprite.position);
+      sprite.position.set(0, 0, 0);
+      group.add(sprite);
+      return group;
+    }
+
+    return sprite;
+  }
+
   private buildFace3D(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.LineSegments | null {
     // 3DFACE: 4 vertices forming a quad (or tri if v3===v4); render as wireframe edges
     const verts = e.vertices as { x: number; y: number; z?: number }[] | undefined;
@@ -363,6 +439,11 @@ export class CadRenderer {
         obj.geometry.dispose();
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         for (const m of mats) m.dispose();
+      }
+      if (obj instanceof THREE.Sprite) {
+        const m = obj.material as THREE.SpriteMaterial;
+        m.map?.dispose();
+        m.dispose();
       }
     });
 

@@ -206,10 +206,14 @@ export function parseDxf(content: string): CadDocument {
   const rawLayers = raw?.tables?.layer?.layers ?? {};
   const layers: CadLayer[] = Object.values(rawLayers).map((layer: unknown) => {
     const l = layer as Record<string, unknown>;
+    // dxf-parser stores the raw ACI value; negative means layer is off/frozen
+    // Try colorIndex first (available in some versions), then color
+    const rawColor = l.colorIndex ?? l.color ?? 7;
+    const colorIdx = Math.abs(Number(rawColor)) || 7;
     return {
       name: String(l.name ?? '0'),
-      color: Number(l.color ?? 7),
-      colorHex: aciToHex(Number(l.color ?? 7)),
+      color: colorIdx,
+      colorHex: aciToHex(colorIdx),
       visible: !l.frozen,
       frozen: Boolean(l.frozen),
       lineWeight: Number(l.lineWeight ?? 0),
