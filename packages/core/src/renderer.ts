@@ -369,42 +369,80 @@ export class CadRenderer {
     return sprite;
   }
 
-  private buildSolidFill(e: CadEntity, color: string, ox: number, oy: number, oz: number): THREE.Mesh | null {
+  private buildSolidFill(e: CadEntity, color: string, ox: number, oy: number, oz: number): THREE.Object3D | null {
     const raw = e.vertices as { x: number; y: number; z?: number }[] | undefined;
     if (!raw || raw.length < 3) return null;
 
     // Filter non-finite coordinates
-    const verts = raw.filter(v => isFinite(v.x) && isFinite(v.y));
-    if (verts.length < 3) return null;
+    const all = raw.filter(v => isFinite(v.x) && isFinite(v.y));
+    if (all.length < 3) return null;
 
-    // Compute bounding box
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const v of verts) {
-      if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
-      if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+    // DWG HATCH polyline boundaries encode mainland + offshore islands in a SINGLE polyline
+    // by connecting them with long "jump" edges. Split at jump edges so each sub-region
+    // (mainland, each island) becomes a separate simple polygon without self-intersections.
+    const n = all.length;
+    const edgeLens: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      edgeLens.push(Math.hypot(all[j].x - all[i].x, all[j].y - all[i].y));
     }
-    const w = maxX - minX, h = maxY - minY;
-    if (w + h < 1e-10) return null;
-    // Skip spike-like shapes: bounding box aspect ratio > 500 means degenerate polygon
-    const aspect = Math.max(w, h) / Math.max(Math.min(w, h), 1e-10);
-    if (aspect > 500) return null;
+    const sorted = [...edgeLens].sort((a, b) => a - b);
+    const medLen = sorted[Math.floor(n / 2)] || 1e-10;
+    const jumpThresh = medLen * 25; // edges > 25× median are "jump" connections
 
-    const shape = new THREE.Shape();
-    shape.moveTo(verts[0].x - ox, verts[0].y - oy);
-    for (let i = 1; i < verts.length; i++) {
-      shape.lineTo(verts[i].x - ox, verts[i].y - oy);
+    // Collect sub-polygons
+    const subPolys: { x: number; y: number; z?: number }[][] = [];
+    let cur: { x: number; y: number; z?: number }[] = [all[0]];
+    for (let i = 0; i < n - 1; i++) {
+      if (edgeLens[i] > jumpThresh) {
+        if (cur.length >= 3) subPolys.push(cur);
+        cur = [all[i + 1]];
+      } else {
+        cur.push(all[i + 1]);
+      }
     }
-    shape.closePath();
-    const geo = new THREE.ShapeGeometry(shape);
+    // Check closing edge (last → first)
+    const closingLen = Math.hypot(all[0].x - all[n - 1].x, all[0].y - all[n - 1].y);
+    if (closingLen <= jumpThresh && cur.length >= 1) cur.push(all[0]);
+    if (cur.length >= 3) subPolys.push(cur);
+
+    if (subPolys.length === 0) return null;
+
     const mat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(color),
       opacity: 0.7,
       transparent: true,
       side: THREE.DoubleSide,
     });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.z = (verts[0].z ?? 0) - oz;
-    return mesh;
+    const oz0 = (all[0].z ?? 0) - oz;
+
+    const makeMesh = (verts: { x: number; y: number; z?: number }[]): THREE.Mesh | null => {
+      // Compute bounding box aspect ratio — skip degenerate spike-like polygons
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const v of verts) {
+        if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+        if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+      }
+      const w = maxX - minX, h = maxY - minY;
+      if (w + h < 1e-10) return null;
+      if (Math.max(w, h) / Math.max(Math.min(w, h), 1e-10) > 500) return null;
+      const shape = new THREE.Shape();
+      shape.moveTo(verts[0].x - ox, verts[0].y - oy);
+      for (let i = 1; i < verts.length; i++) shape.lineTo(verts[i].x - ox, verts[i].y - oy);
+      shape.closePath();
+      const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat);
+      mesh.position.z = oz0;
+      return mesh;
+    };
+
+    if (subPolys.length === 1) return makeMesh(subPolys[0]);
+
+    const group = new THREE.Group();
+    for (const seg of subPolys) {
+      const mesh = makeMesh(seg);
+      if (mesh) group.add(mesh);
+    }
+    return group.children.length > 0 ? group : null;
   }
 
   private buildFace3D(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.LineSegments | null {
