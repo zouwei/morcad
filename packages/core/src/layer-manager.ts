@@ -33,7 +33,7 @@ export class LayerManager {
     this.panel = document.createElement('div');
     Object.assign(this.panel.style, {
       position: 'absolute',
-      top: '13px',
+      top: '40px',
       right: '8px',
       background: bg,
       color: fg,
