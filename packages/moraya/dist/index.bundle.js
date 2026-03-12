@@ -17246,7 +17246,7 @@ const Am = {
   sizeKb: 800,
   languages: ["morcad", "dxf", "dwg"],
   homepage: "https://github.com/zouwei/morcad",
-  cdnUrl: "https://cdn.jsdelivr.net/gh/zouwei/morcad@main/packages/moraya/dist/index.bundle.js",
+  cdnUrl: "https://cdn.jsdelivr.net/gh/zouwei/morcad@v0.1.5/packages/moraya/dist/index.bundle.js",
   isFilePathRenderer: !0,
   aiHint: "Use ```dxf for DXF files, ```dwg for DWG files, or ```morcad for parameter mode. Examples:\n```dxf\n./drawings/floor-plan.dxf\n```\n```morcad\nfile: ./drawings/floor-plan.dxf\nlayers: WALLS, DOORS\nheight: 500\n```",
   async render(i, e, t, n) {
