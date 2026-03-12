@@ -247,13 +247,39 @@ function mapEntity(e: any, db: any, depth = 0): CadEntity | CadEntity[] | null {
     }
 
     case 'HATCH': {
-      // Render HATCH boundary outline as polylines
+      const isSolid = (e.solidFill as number) === 1;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const paths: any[] = e.boundaryPaths ?? [];
       const result: CadEntity[] = [];
       for (const path of paths) {
+        // DwgPolylineBoundaryPath uses path.vertices (not path.polylineVertices)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const polyPts: any[] = path.vertices ?? path.polylineVertices ?? [];
+        if (polyPts.length >= 2) {
+          const verts = polyPts.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y, z: 0 }));
+          if (isSolid && polyPts.length >= 3) {
+            result.push({ ...base, type: 'SOLID_FILL', vertices: verts });
+          } else {
+            result.push({ ...base, type: 'POLYLINE', vertices: verts });
+          }
+          continue;
+        }
+        // Edge-based boundary path
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const edges: any[] = path.edges ?? [];
+        if (isSolid && edges.length > 0) {
+          // Collect all edge start points to build a polygon
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const verts: any[] = [];
+          for (const edge of edges) {
+            if (edge.type === 1 /* Line */) verts.push({ x: edge.start.x, y: edge.start.y, z: 0 });
+            else if (edge.type === 2 /* CircularArc */) verts.push({ x: edge.center.x + edge.radius * Math.cos(edge.startAngle), y: edge.center.y + edge.radius * Math.sin(edge.startAngle), z: 0 });
+          }
+          if (verts.length >= 3) {
+            result.push({ ...base, type: 'SOLID_FILL', vertices: verts });
+            continue;
+          }
+        }
         for (const edge of edges) {
           if (edge.type === 1 /* Line */) {
             result.push({ ...base, type: 'LINE', start: edge.start, end: edge.end });
@@ -278,15 +304,6 @@ function mapEntity(e: any, db: any, depth = 0): CadEntity | CadEntity[] | null {
             const pts = edge.fitPoints?.length > 0 ? edge.fitPoints : (edge.controlPoints ?? []);
             if (pts.length >= 2) result.push({ ...base, type: 'POLYLINE', vertices: pts });
           }
-        }
-        // polyline boundary (no edges)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const polyPts: any[] = path.polylineVertices ?? [];
-        if (polyPts.length >= 2) {
-          result.push({
-            ...base, type: 'POLYLINE',
-            vertices: polyPts.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y, z: 0 })),
-          });
         }
       }
       return result.length > 0 ? result : null;

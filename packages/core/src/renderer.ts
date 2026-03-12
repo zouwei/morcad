@@ -192,6 +192,8 @@ export class CadRenderer {
       case 'ATTRIB':
       case 'MTEXT':
         return this.buildText(entity, color, ox, oy, oz);
+      case 'SOLID_FILL':
+        return this.buildSolidFill(entity, color, ox, oy, oz);
       default:
         return null;
     }
@@ -366,6 +368,27 @@ export class CadRenderer {
     }
 
     return sprite;
+  }
+
+  private buildSolidFill(e: CadEntity, color: string, ox: number, oy: number, oz: number): THREE.Mesh | null {
+    const verts = e.vertices as { x: number; y: number; z?: number }[] | undefined;
+    if (!verts || verts.length < 3) return null;
+    const shape = new THREE.Shape();
+    shape.moveTo(verts[0].x - ox, verts[0].y - oy);
+    for (let i = 1; i < verts.length; i++) {
+      shape.lineTo(verts[i].x - ox, verts[i].y - oy);
+    }
+    shape.closePath();
+    const geo = new THREE.ShapeGeometry(shape);
+    const mat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(color),
+      opacity: 0.7,
+      transparent: true,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.z = (verts[0].z ?? 0) - oz;
+    return mesh;
   }
 
   private buildFace3D(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.LineSegments | null {
