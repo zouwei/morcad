@@ -22,6 +22,7 @@ import { parseDwg } from './parser-dwg.js';
 import { CadRenderer } from './renderer.js';
 import { LayerManager } from './layer-manager.js';
 import { parseSource } from './source-parser.js';
+import { getIsDark } from './theme.js';
 import type { CadRenderOptions, CadViewerInstance, FileReaderAdapter } from './types.js';
 
 /**
@@ -43,10 +44,11 @@ export async function renderCad(
   const cadRenderer = new CadRenderer(container, opts);
   await cadRenderer.loadDocument(doc);
 
+  const panelIsDark = opts.theme === 'dark' || (opts.theme !== 'light' && getIsDark());
   const layerManager = opts.showLayerPanel !== false
     ? new LayerManager(container, (layerName, visible) => {
         cadRenderer.setLayerVisibility(layerName, visible);
-      })
+      }, panelIsDark)
     : null;
 
   layerManager?.render(doc.layers);

@@ -52,11 +52,9 @@ export class CadRenderer {
   private resolveBackground(options: CadRenderOptions): string {
     if (options.backgroundColor) return options.backgroundColor;
     const theme = options.theme ?? 'auto';
-    if (theme === 'dark') return '#1e1e1e';
     if (theme === 'light') return '#f5f5f5';
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-      || document.body.classList.contains('theme-dark');
-    return isDark ? '#1e1e1e' : '#f5f5f5';
+    // dark and auto both use engineering dark-canvas convention
+    return '#1e1e1e';
   }
 
   private startRenderLoop(): void {

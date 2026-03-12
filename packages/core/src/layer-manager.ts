@@ -5,13 +5,16 @@ export class LayerManager {
   private panel: HTMLElement | null = null;
   private onToggle: (layerName: string, visible: boolean) => void;
   private layerStates: Map<string, boolean> = new Map();
+  private isDark: boolean;
 
   constructor(
     container: HTMLElement,
     onToggle: (layerName: string, visible: boolean) => void,
+    isDark = false,
   ) {
     this.container = container;
     this.onToggle = onToggle;
+    this.isDark = isDark;
   }
 
   render(layers: CadLayer[]): void {
@@ -21,27 +24,36 @@ export class LayerManager {
       this.layerStates.set(l.name, l.visible);
     }
 
+    const dark = this.isDark;
+    const bg = dark ? 'rgba(50,50,50,0.75)' : 'rgba(240,240,240,0.88)';
+    const fg = dark ? '#eee' : '#333';
+    const titleColor = dark ? '#aaa' : '#666';
+    const swatchBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)';
+
     this.panel = document.createElement('div');
     Object.assign(this.panel.style, {
       position: 'absolute',
       top: '8px',
       right: '8px',
-      background: 'rgba(30,30,30,0.85)',
-      color: '#eee',
+      background: bg,
+      color: fg,
       borderRadius: '6px',
       padding: '6px 8px',
       fontSize: '12px',
       fontFamily: 'monospace',
       maxHeight: '200px',
+      maxWidth: '140px',
+      minWidth: '100px',
       overflowY: 'auto',
       zIndex: '10',
       backdropFilter: 'blur(4px)',
       userSelect: 'none',
+      boxShadow: dark ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.15)',
     });
 
     const title = document.createElement('div');
     title.textContent = 'Layers';
-    Object.assign(title.style, { fontWeight: 'bold', marginBottom: '4px', color: '#aaa', fontSize: '11px' });
+    Object.assign(title.style, { fontWeight: 'bold', marginBottom: '4px', color: titleColor, fontSize: '11px' });
     this.panel.appendChild(title);
 
     for (const layer of layers) {
@@ -64,7 +76,7 @@ export class LayerManager {
         height: '10px',
         borderRadius: '2px',
         background: layer.colorHex,
-        border: '1px solid rgba(255,255,255,0.2)',
+        border: `1px solid ${swatchBorder}`,
         flexShrink: '0',
       });
 
