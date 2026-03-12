@@ -128,20 +128,26 @@ export class CadRenderer {
   }
 
   private resolveEntityColor(entity: CadEntity, doc: CadDocument): string {
-    // dxf-parser sets colorIndex (ACI) + color (24-bit RGB); parser-dwg sets color (ACI)
+    // ── DXF path (dxf-parser): entity has colorIndex (ACI) + color (24-bit RGB) ──
     if (entity.colorIndex != null) {
-      // DXF path: colorIndex 0 = ByBlock, 256 = ByLayer; otherwise explicit color
       const idx = entity.colorIndex as number;
       if (idx !== 0 && idx !== 256) {
-        // Try 24-bit RGB first, fall back to direct ACI lookup
+        // Explicit ACI color — try 24-bit RGB first, fall back to ACI lookup
         const hex = entity.color != null
           ? '#' + (entity.color as number).toString(16).padStart(6, '0')
           : aciToHex(idx);
         return this.themeAdaptColor(hex);
       }
-    } else if (entity.color != null && entity.color !== 256 && entity.color !== 0) {
-      // DWG path: color field stores ACI index; 0=ByBlock and 256=ByLayer both fall through to layer
-      return this.themeAdaptColor(aciToHex(entity.color as number));
+    } else {
+      // ── DWG path (parser-dwg): color = ACI index, trueColor = 24-bit RGB ──
+      const aci = entity.color as number | undefined;
+      if (aci != null && aci !== 256 && aci !== 0) {
+        return this.themeAdaptColor(aciToHex(aci));
+      }
+      // 24-bit TrueColor (when ACI is absent, ByBlock, or ByLayer)
+      if (entity.trueColor != null) {
+        return '#' + (entity.trueColor as number).toString(16).padStart(6, '0');
+      }
     }
     const layer = doc.layers.find(l => l.name === (entity.layer ?? '0'));
     return this.themeAdaptColor(layer?.colorHex ?? '#ffffff');

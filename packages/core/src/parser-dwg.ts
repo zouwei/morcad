@@ -85,10 +85,19 @@ function transformEntity(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapEntity(e: any, db: any, depth = 0): CadEntity | CadEntity[] | null {
-  const base = {
+  // colorIndex: ACI value (0=ByBlock, 256=ByLayer, 1-255=explicit, absent=ByLayer)
+  // negative colorIndex indicates the layer is turned off — use Math.abs
+  const rawIdx = e.colorIndex;
+  const aciColor = rawIdx != null ? Math.abs(rawIdx as number) : 256;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const base: Record<string, any> = {
     layer: e.layer ?? '0',
-    color: e.colorIndex ?? 256,  // 256 = ByLayer
+    color: aciColor,  // 256 = ByLayer
   };
+  // If entity has 24-bit TrueColor (colorIndex absent) pass it through separately
+  if (rawIdx == null && e.color != null) {
+    base.trueColor = e.color as number;
+  }
 
   switch (e.type) {
     case 'LINE':
@@ -284,24 +293,44 @@ function mapEntity(e: any, db: any, depth = 0): CadEntity | CadEntity[] | null {
     }
 
     case 'TEXT':
-    case 'ATTDEF':
-    case 'ATTRIB':
+      // DwgTextEntity extends DwgTextBase directly:
+      //   e.text: string, e.startPoint: DwgPoint2D, e.textHeight: number, e.rotation: radians
       return {
         ...base,
-        type: e.type as string,
-        text: String(e.text ?? e.textValue ?? e.value ?? ''),
-        startPoint: e.insertionPoint ?? e.startPoint ?? { x: 0, y: 0, z: 0 },
-        textHeight: e.height ?? e.textHeight ?? 1,
+        type: 'TEXT',
+        text: String(e.text ?? ''),
+        startPoint: { x: e.startPoint?.x ?? 0, y: e.startPoint?.y ?? 0, z: 0 },
+        textHeight: e.textHeight ?? e.height ?? 1,
         rotation: (e.rotation ?? 0) * RAD_TO_DEG,
       };
 
+    case 'ATTDEF':
+    case 'ATTRIB': {
+      // DwgAttdefEntity / DwgAttribEntity: text is a nested DwgTextBase object
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tb = e.text as Record<string, any> | null; // DwgTextBase
+      const attrText = String(tb?.text ?? e.tag ?? '');
+      const attrPos = tb?.startPoint ?? e.startPoint ?? { x: 0, y: 0 };
+      const attrH = tb?.textHeight ?? tb?.height ?? e.textHeight ?? e.height ?? 1;
+      const attrRot = (tb?.rotation ?? e.rotation ?? 0) * RAD_TO_DEG;
+      return {
+        ...base,
+        type: e.type as string,
+        text: attrText,
+        startPoint: { x: attrPos.x ?? 0, y: attrPos.y ?? 0, z: 0 },
+        textHeight: attrH,
+        rotation: attrRot,
+      };
+    }
+
     case 'MTEXT':
+      // DwgMTextEntity: e.text: string, e.insertionPoint: DwgPoint3D, e.textHeight: number
       return {
         ...base,
         type: 'MTEXT',
-        text: String(e.text ?? e.textValue ?? ''),
+        text: String(e.text ?? ''),
         position: e.insertionPoint ?? e.position ?? { x: 0, y: 0, z: 0 },
-        height: e.height ?? e.referenceRectHeight ?? 1,
+        height: e.textHeight ?? e.height ?? 1,
         rotation: (e.rotation ?? 0) * RAD_TO_DEG,
       };
 
@@ -385,14 +414,18 @@ export async function parseDwg(content: Uint8Array, wasmBaseUrl?: string): Promi
   // ---- Layers ----
   const layers: CadLayer[] = (db.tables?.LAYER?.entries ?? []).map(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (l: any) => ({
-      name:       String(l.name ?? '0'),
-      color:      Number(l.colorIndex ?? 7),
-      colorHex:   aciToHex(Number(l.colorIndex ?? 7)),
-      visible:    !l.frozen && !l.off,
-      frozen:     Boolean(l.frozen),
-      lineWeight: Number(l.lineweight ?? 0),
-    })
+    (l: any) => {
+      // colorIndex can be negative when the layer is off; use Math.abs for actual ACI
+      const colorIdx = Math.abs(Number(l.colorIndex ?? 7)) || 7;
+      return {
+        name:       String(l.name ?? '0'),
+        color:      colorIdx,
+        colorHex:   aciToHex(colorIdx),
+        visible:    !l.frozen && !l.off,
+        frozen:     Boolean(l.frozen),
+        lineWeight: Number(l.lineweight ?? 0),
+      };
+    }
   );
 
   if (!layers.find(l => l.name === '0')) {
