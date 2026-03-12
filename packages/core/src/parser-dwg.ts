@@ -283,6 +283,28 @@ function mapEntity(e: any, db: any, depth = 0): CadEntity | CadEntity[] | null {
       return result.length > 0 ? result : null;
     }
 
+    case 'TEXT':
+    case 'ATTDEF':
+    case 'ATTRIB':
+      return {
+        ...base,
+        type: e.type as string,
+        text: String(e.text ?? e.textValue ?? e.value ?? ''),
+        startPoint: e.insertionPoint ?? e.startPoint ?? { x: 0, y: 0, z: 0 },
+        textHeight: e.height ?? e.textHeight ?? 1,
+        rotation: (e.rotation ?? 0) * RAD_TO_DEG,
+      };
+
+    case 'MTEXT':
+      return {
+        ...base,
+        type: 'MTEXT',
+        text: String(e.text ?? e.textValue ?? ''),
+        position: e.insertionPoint ?? e.position ?? { x: 0, y: 0, z: 0 },
+        height: e.height ?? e.referenceRectHeight ?? 1,
+        rotation: (e.rotation ?? 0) * RAD_TO_DEG,
+      };
+
     case 'INSERT': {
       if (depth >= 8) return null; // guard against infinite recursion
 

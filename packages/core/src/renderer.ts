@@ -139,8 +139,8 @@ export class CadRenderer {
           : aciToHex(idx);
         return this.themeAdaptColor(hex);
       }
-    } else if (entity.color != null && entity.color !== 256) {
-      // DWG path: color field stores ACI index
+    } else if (entity.color != null && entity.color !== 256 && entity.color !== 0) {
+      // DWG path: color field stores ACI index; 0=ByBlock and 256=ByLayer both fall through to layer
       return this.themeAdaptColor(aciToHex(entity.color as number));
     }
     const layer = doc.layers.find(l => l.name === (entity.layer ?? '0'));
