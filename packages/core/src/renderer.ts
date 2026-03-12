@@ -369,80 +369,62 @@ export class CadRenderer {
     return sprite;
   }
 
-  private buildSolidFill(e: CadEntity, color: string, ox: number, oy: number, oz: number): THREE.Object3D | null {
+  private buildSolidFill(e: CadEntity, color: string, ox: number, oy: number, oz: number): THREE.Mesh | null {
     const raw = e.vertices as { x: number; y: number; z?: number }[] | undefined;
     if (!raw || raw.length < 3) return null;
+    const pts = raw.filter(v => isFinite(v.x) && isFinite(v.y));
+    if (pts.length < 3) return null;
 
-    // Filter non-finite coordinates
-    const all = raw.filter(v => isFinite(v.x) && isFinite(v.y));
-    if (all.length < 3) return null;
-
-    // DWG HATCH polyline boundaries encode mainland + offshore islands in a SINGLE polyline
-    // by connecting them with long "jump" edges. Split at jump edges so each sub-region
-    // (mainland, each island) becomes a separate simple polygon without self-intersections.
-    const n = all.length;
-    const edgeLens: number[] = [];
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      edgeLens.push(Math.hypot(all[j].x - all[i].x, all[j].y - all[i].y));
+    // Bounding box
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const v of pts) {
+      if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+      if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
     }
-    const sorted = [...edgeLens].sort((a, b) => a - b);
-    const medLen = sorted[Math.floor(n / 2)] || 1e-10;
-    const jumpThresh = medLen * 25; // edges > 25× median are "jump" connections
+    const w = maxX - minX, h = maxY - minY;
+    if (w + h < 1e-10) return null;
+    // Skip spike-like degenerate shapes
+    if (Math.max(w, h) / Math.max(Math.min(w, h), 1e-10) > 500) return null;
 
-    // Collect sub-polygons
-    const subPolys: { x: number; y: number; z?: number }[][] = [];
-    let cur: { x: number; y: number; z?: number }[] = [all[0]];
-    for (let i = 0; i < n - 1; i++) {
-      if (edgeLens[i] > jumpThresh) {
-        if (cur.length >= 3) subPolys.push(cur);
-        cur = [all[i + 1]];
-      } else {
-        cur.push(all[i + 1]);
-      }
+    // Use HTML Canvas with evenodd fill rule — correctly handles DWG HATCH boundaries
+    // that encode mainland + island detours as a single self-intersecting polyline.
+    const MAX_DIM = 1024;
+    const scale = MAX_DIM / Math.max(w, h);
+    const cw = Math.max(4, Math.min(Math.ceil(w * scale) + 2, MAX_DIM + 2));
+    const ch = Math.max(4, Math.min(Math.ceil(h * scale) + 2, MAX_DIM + 2));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    const c = new THREE.Color(color);
+    ctx.fillStyle = `rgb(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)})`;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const px = (pts[i].x - minX) * scale + 1;
+      const py = (maxY - pts[i].y) * scale + 1; // Y-flip for canvas
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
-    // Check closing edge (last → first)
-    const closingLen = Math.hypot(all[0].x - all[n - 1].x, all[0].y - all[n - 1].y);
-    if (closingLen <= jumpThresh && cur.length >= 1) cur.push(all[0]);
-    if (cur.length >= 3) subPolys.push(cur);
+    ctx.closePath();
+    ctx.fill('evenodd');
 
-    if (subPolys.length === 0) return null;
-
+    const texture = new THREE.CanvasTexture(canvas);
+    const geo = new THREE.PlaneGeometry(w, h);
     const mat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(color),
-      opacity: 0.7,
-      transparent: true,
+      map: texture,
+      transparent: false,
       side: THREE.DoubleSide,
+      depthWrite: false,
     });
-    const oz0 = (all[0].z ?? 0) - oz;
-
-    const makeMesh = (verts: { x: number; y: number; z?: number }[]): THREE.Mesh | null => {
-      // Compute bounding box aspect ratio — skip degenerate spike-like polygons
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const v of verts) {
-        if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
-        if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
-      }
-      const w = maxX - minX, h = maxY - minY;
-      if (w + h < 1e-10) return null;
-      if (Math.max(w, h) / Math.max(Math.min(w, h), 1e-10) > 500) return null;
-      const shape = new THREE.Shape();
-      shape.moveTo(verts[0].x - ox, verts[0].y - oy);
-      for (let i = 1; i < verts.length; i++) shape.lineTo(verts[i].x - ox, verts[i].y - oy);
-      shape.closePath();
-      const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat);
-      mesh.position.z = oz0;
-      return mesh;
-    };
-
-    if (subPolys.length === 1) return makeMesh(subPolys[0]);
-
-    const group = new THREE.Group();
-    for (const seg of subPolys) {
-      const mesh = makeMesh(seg);
-      if (mesh) group.add(mesh);
-    }
-    return group.children.length > 0 ? group : null;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(
+      (minX + maxX) / 2 - ox,
+      (minY + maxY) / 2 - oy,
+      (pts[0].z ?? 0) - oz,
+    );
+    return mesh;
   }
 
   private buildFace3D(e: CadEntity, mat: THREE.LineBasicMaterial, ox: number, oy: number, oz: number): THREE.LineSegments | null {

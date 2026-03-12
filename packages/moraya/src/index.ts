@@ -49,7 +49,7 @@ export const cadRendererPlugin = {
   sizeKb: 800,
   languages: ['morcad', 'dxf', 'dwg'],
   homepage: 'https://github.com/zouwei/morcad',
-  cdnUrl: 'https://cdn.jsdelivr.net/gh/zouwei/morcad@v0.2.6/packages/moraya/dist/index.bundle.js',
+  cdnUrl: 'https://cdn.jsdelivr.net/gh/zouwei/morcad@v0.2.7/packages/moraya/dist/index.bundle.js',
   isFilePathRenderer: true,
   aiHint:
     'Use ```dxf for DXF files, ```dwg for DWG files, or ```morcad for parameter mode. ' +
