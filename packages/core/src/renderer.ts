@@ -370,28 +370,13 @@ export class CadRenderer {
   }
 
   private buildSolidFill(e: CadEntity, color: string, ox: number, oy: number, oz: number): THREE.Mesh | null {
+    // Each SOLID_FILL = one independent closed polygon (one DWG boundary path).
     const raw = e.vertices as { x: number; y: number; z?: number }[] | undefined;
     if (!raw || raw.length < 3) return null;
-    const all = raw.filter(v => isFinite(v.x) && isFinite(v.y));
-    if (all.length < 3) return null;
-
-    // IQR-based outlier filtering to remove corrupted extreme vertices.
-    // Uses max(IQR, 5% of full range) as minimum fence so the filter
-    // never collapses when many vertices share the same coordinate.
-    const n = all.length;
-    const xs = all.map(v => v.x).sort((a, b) => a - b);
-    const ys = all.map(v => v.y).sort((a, b) => a - b);
-    const q1x = xs[Math.floor(n * 0.25)], q3x = xs[Math.floor(n * 0.75)];
-    const q1y = ys[Math.floor(n * 0.25)], q3y = ys[Math.floor(n * 0.75)];
-    const fenceX = Math.max(q3x - q1x, (xs[n - 1] - xs[0]) * 0.05) * 4;
-    const fenceY = Math.max(q3y - q1y, (ys[n - 1] - ys[0]) * 0.05) * 4;
-    const pts = all.filter(v =>
-      v.x >= q1x - fenceX && v.x <= q3x + fenceX &&
-      v.y >= q1y - fenceY && v.y <= q3y + fenceY,
-    );
+    const pts = raw.filter(v => isFinite(v.x) && isFinite(v.y));
     if (pts.length < 3) return null;
 
-    // Bounding box of cleaned vertices
+    // Bounding box
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const v of pts) {
       if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
@@ -399,11 +384,17 @@ export class CadRenderer {
     }
     const w = maxX - minX, h = maxY - minY;
     if (w + h < 1e-10) return null;
-    if (Math.max(w, h) / Math.max(Math.min(w, h), 1e-10) > 500) return null;
+    // Skip degenerate thin polygons (aspect ratio > 10)
+    if (Math.max(w, h) / Math.max(Math.min(w, h), 1e-10) > 10) return null;
+    // Skip thin slivers (polygon area < 1% of bounding box)
+    let polyArea = 0;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      polyArea += (pts[j].x - pts[i].x) * (pts[j].y + pts[i].y);
+    }
+    if (w * h > 0 && Math.abs(polyArea) / 2 / (w * h) < 0.01) return null;
 
-    // Use HTML Canvas with evenodd fill rule — correctly handles DWG HATCH boundaries
-    // that encode mainland + island detours as a single self-intersecting polyline.
-    const MAX_DIM = 1024;
+    // Render polygon on canvas
+    const MAX_DIM = 2048;
     const scale = MAX_DIM / Math.max(w, h);
     const cw = Math.max(4, Math.min(Math.ceil(w * scale) + 2, MAX_DIM + 2));
     const ch = Math.max(4, Math.min(Math.ceil(h * scale) + 2, MAX_DIM + 2));
@@ -416,20 +407,22 @@ export class CadRenderer {
 
     const c = new THREE.Color(color);
     ctx.fillStyle = `rgb(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)})`;
+
     ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      const px = (pts[i].x - minX) * scale + 1;
-      const py = (maxY - pts[i].y) * scale + 1; // Y-flip: canvas Y grows down, world Y grows up
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    ctx.moveTo((pts[0].x - minX) * scale + 1, (maxY - pts[0].y) * scale + 1);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo((pts[i].x - minX) * scale + 1, (maxY - pts[i].y) * scale + 1);
     }
     ctx.closePath();
-    ctx.fill('evenodd');
+    ctx.fill();
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
     const geo = new THREE.PlaneGeometry(w, h);
     const mat = new THREE.MeshBasicMaterial({
       map: texture,
-      transparent: true,   // canvas background is transparent — must be true
+      alphaTest: 0.5,
       side: THREE.DoubleSide,
       depthWrite: false,
     });

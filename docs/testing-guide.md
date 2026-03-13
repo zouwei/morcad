@@ -31,14 +31,14 @@ ES modules 不能通过 `file://` 加载，需要 HTTP 服务：
 
 ```bash
 cd examples/vanilla
-npx serve . -l 8080
+npx serve . -l 9090
 # 或
-python3 -m http.server 8080
+python3 -m http.server 9090
 ```
 
 ### 3. 打开浏览器
 
-访问 `http://localhost:8080`
+访问 `http://localhost:9090`
 
 ### 预期结果
 
@@ -157,7 +157,7 @@ bash examples/scripts/get-sample-dwg.sh
    pnpm dev:demo
    ```
 
-2. 在浏览器中打开 `http://localhost:8080`
+2. 在浏览器中打开 `http://localhost:9090`
 
 3. 使用文件选择器上传 `.dwg` 文件
 

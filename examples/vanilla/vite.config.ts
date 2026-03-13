@@ -10,7 +10,8 @@ export default defineConfig({
   // Serve sample DXF files at the URL root (e.g. /floor-plan.dxf)
   publicDir: '../sample-files',
   server: {
-    port: 8080,
+    port: 9090,
+    strictPort: true,
     open: true,
   },
   optimizeDeps: {

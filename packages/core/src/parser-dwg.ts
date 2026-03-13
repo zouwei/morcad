@@ -250,64 +250,58 @@ function mapEntity(e: any, db: any, depth = 0): CadEntity | CadEntity[] | null {
       const isSolid = (e.solidFill as number) === 1;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const paths: any[] = e.boundaryPaths ?? [];
+
+      if (isSolid) {
+        // Each boundary path = one independent filled region (mainland, island, etc.).
+        const result: CadEntity[] = [];
+        for (const path of paths) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const polyPts: any[] = path.vertices ?? path.polylineVertices ?? [];
+          if (polyPts.length >= 3) {
+            result.push({ ...base, type: 'SOLID_FILL', vertices: polyPts.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y, z: 0 })) });
+            continue;
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const edges: any[] = path.edges ?? [];
+          if (edges.length >= 1) {
+            const verts: { x: number; y: number; z: number }[] = [];
+            for (const edge of edges) {
+              if (edge.type === 1 /* Line */) {
+                verts.push({ x: edge.start.x, y: edge.start.y, z: 0 });
+              } else if (edge.type === 2 /* CircularArc */) {
+                const cx = edge.center.x, cy = edge.center.y, r = edge.radius;
+                const sa = edge.startAngle, ea = edge.endAngle;
+                const steps = Math.max(4, Math.round(Math.abs(ea - sa) / (Math.PI / 8)));
+                for (let k = 0; k <= steps; k++) {
+                  const a = sa + (ea - sa) * k / steps;
+                  verts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a), z: 0 });
+                }
+              }
+            }
+            if (verts.length >= 3) result.push({ ...base, type: 'SOLID_FILL', vertices: verts });
+          }
+        }
+        return result.length > 0 ? result : null;
+      }
+
+      // Pattern fill: render boundary outlines
       const result: CadEntity[] = [];
       for (const path of paths) {
-        // DwgPolylineBoundaryPath uses path.vertices (not path.polylineVertices)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const polyPts: any[] = path.vertices ?? path.polylineVertices ?? [];
         if (polyPts.length >= 2) {
-          const verts = polyPts.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y, z: 0 }));
-          if (isSolid && polyPts.length >= 3) {
-            result.push({ ...base, type: 'SOLID_FILL', vertices: verts });
-          } else {
-            result.push({ ...base, type: 'POLYLINE', vertices: verts });
-          }
+          result.push({ ...base, type: 'POLYLINE', vertices: polyPts.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y, z: 0 })) });
           continue;
         }
-        // Edge-based boundary path
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const edges: any[] = path.edges ?? [];
-        if (isSolid && edges.length >= 3) {
-          // For solid fills, collect edge start points to form a polygon.
-          // Individual edge outlines would appear as scattered dashes — suppress them.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const solidVerts: any[] = [];
-          for (const edge of edges) {
-            if (edge.type === 1 /* Line */) {
-              solidVerts.push({ x: edge.start.x, y: edge.start.y, z: 0 });
-            } else if (edge.type === 2 /* CircularArc */) {
-              solidVerts.push({
-                x: edge.center.x + edge.radius * Math.cos(edge.startAngle),
-                y: edge.center.y + edge.radius * Math.sin(edge.startAngle),
-                z: 0,
-              });
-            }
-          }
-          if (solidVerts.length >= 3) {
-            result.push({ ...base, type: 'SOLID_FILL', vertices: solidVerts });
-          }
-          continue;
-        }
         for (const edge of edges) {
           if (edge.type === 1 /* Line */) {
             result.push({ ...base, type: 'LINE', start: edge.start, end: edge.end });
           } else if (edge.type === 2 /* CircularArc */) {
-            result.push({
-              ...base, type: 'ARC',
-              center: edge.center,
-              radius: edge.radius,
-              startAngle: edge.startAngle * RAD_TO_DEG,
-              endAngle: edge.endAngle * RAD_TO_DEG,
-            });
+            result.push({ ...base, type: 'ARC', center: edge.center, radius: edge.radius, startAngle: edge.startAngle * RAD_TO_DEG, endAngle: edge.endAngle * RAD_TO_DEG });
           } else if (edge.type === 3 /* EllipticArc */) {
-            result.push({
-              ...base, type: 'ELLIPSE',
-              center: edge.center,
-              majorAxisEndPoint: edge.majorAxisEndPoint,
-              axisRatio: edge.minorToMajorRatio ?? 1,
-              startAngle: edge.startAngle ?? 0,
-              endAngle: edge.endAngle ?? TWO_PI,
-            });
+            result.push({ ...base, type: 'ELLIPSE', center: edge.center, majorAxisEndPoint: edge.majorAxisEndPoint, axisRatio: edge.minorToMajorRatio ?? 1, startAngle: edge.startAngle ?? 0, endAngle: edge.endAngle ?? TWO_PI });
           } else if (edge.type === 4 /* Spline */) {
             const pts = edge.fitPoints?.length > 0 ? edge.fitPoints : (edge.controlPoints ?? []);
             if (pts.length >= 2) result.push({ ...base, type: 'POLYLINE', vertices: pts });
