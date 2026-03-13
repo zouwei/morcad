@@ -1,7 +1,7 @@
 {
   "id": "morcad",
   "name": "MorCad CAD Viewer",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Renders DXF/DWG engineering drawings inline as code blocks",
   "author": "zouwei",
   "license": "GPL-3.0",
